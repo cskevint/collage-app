@@ -85,6 +85,8 @@ type CroppableImageProps = {
   onCropChange: (crop: Crop) => void;
   onImageLoad: (naturalWidth: number, naturalHeight: number) => void;
   onClear: () => void;
+  /** When true, show touch/pointer count and gesture state for debugging */
+  debug?: boolean;
 };
 
 function CroppableImage({
@@ -93,8 +95,11 @@ function CroppableImage({
   onCropChange,
   onImageLoad,
   onClear,
+  debug = false,
 }: CroppableImageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [isGestureActive, setIsGestureActive] = useState(false);
+  const [touchCount, setTouchCount] = useState(0);
   const lastPinchRef = useRef<{
     distance: number;
     centerX: number;
@@ -114,34 +119,46 @@ function CroppableImage({
     return el ? { w: el.offsetWidth, h: el.offsetHeight } : null;
   }, []);
 
-  // Native touchmove with passive: false so preventDefault() works (browser ignores it in React's passive handlers)
+  // Native touch with passive: false so preventDefault() works (required for pinch/pan on mobile)
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length >= 2) e.preventDefault();
+    };
     const onTouchMove = (e: TouchEvent) => {
       if (e.touches.length >= 1) e.preventDefault();
     };
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
     el.addEventListener("touchmove", onTouchMove, { passive: false });
-    return () => el.removeEventListener("touchmove", onTouchMove);
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+    };
   }, []);
 
   const applyGestureEnd = useCallback(() => {
     onCropChange(clampCrop(snapCrop(cropRef.current)));
   }, [onCropChange]);
 
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (e.touches.length === 2) {
-      const [a, b] = [e.touches[0], e.touches[1]];
-      const distance = Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
-      const centerX = (a.clientX + b.clientX) / 2;
-      const centerY = (a.clientY + b.clientY) / 2;
-      lastPinchRef.current = { distance, centerX, centerY };
-      lastPanRef.current = null;
-    } else if (e.touches.length === 1) {
-      lastPanRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-      lastPinchRef.current = null;
-    }
-  }, []);
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      setTouchCount(e.touches.length);
+      setIsGestureActive(true);
+      if (e.touches.length === 2) {
+        const [a, b] = [e.touches[0], e.touches[1]];
+        const distance = Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+        const centerX = (a.clientX + b.clientX) / 2;
+        const centerY = (a.clientY + b.clientY) / 2;
+        lastPinchRef.current = { distance, centerX, centerY };
+        lastPanRef.current = null;
+      } else if (e.touches.length === 1) {
+        lastPanRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        lastPinchRef.current = null;
+      }
+    },
+    []
+  );
 
   const handleTouchMove = useCallback(
     (e: React.TouchEvent) => {
@@ -187,8 +204,10 @@ function CroppableImage({
 
   const handleTouchEnd = useCallback(
     (e: React.TouchEvent) => {
+      setTouchCount(e.touches.length);
       if (e.touches.length < 2) lastPinchRef.current = null;
       if (e.touches.length < 1) {
+        setIsGestureActive(false);
         justGesturedRef.current = hadGestureRef.current;
         lastPanRef.current = null;
         hadGestureRef.current = false;
@@ -202,6 +221,8 @@ function CroppableImage({
     if (e.button !== 0) return;
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    setTouchCount(pointersRef.current.size);
+    setIsGestureActive(true);
     if (pointersRef.current.size === 1) {
       lastPanRef.current = { x: e.clientX, y: e.clientY };
       lastPinchRef.current = null;
@@ -259,8 +280,10 @@ function CroppableImage({
   const handlePointerUp = useCallback(
     (e: React.PointerEvent) => {
       pointersRef.current.delete(e.pointerId);
+      setTouchCount(pointersRef.current.size);
       if (pointersRef.current.size < 2) lastPinchRef.current = null;
       if (pointersRef.current.size === 0) {
+        setIsGestureActive(false);
         justGesturedRef.current = hadGestureRef.current;
         lastPanRef.current = null;
         hadGestureRef.current = false;
@@ -294,7 +317,7 @@ function CroppableImage({
   return (
     <div
       ref={containerRef}
-      className="absolute inset-0 flex items-center justify-center overflow-hidden"
+      className="absolute inset-0 flex items-center justify-center overflow-hidden select-none"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -305,10 +328,17 @@ function CroppableImage({
       onPointerCancel={handlePointerUp}
       onWheel={handleWheel}
       onClick={handleContainerClick}
-      style={{ touchAction: "none" }}
+      style={{
+        touchAction: "none",
+        WebkitTouchCallout: "none",
+        WebkitUserSelect: "none",
+        userSelect: "none",
+      }}
     >
       <div
-        className="absolute h-full w-full origin-center"
+        className={`absolute h-full w-full origin-center transition-opacity duration-75 ${
+          isGestureActive ? "opacity-60" : "opacity-100"
+        }`}
         style={{
           transform: `scale(${zoom}) translate(${translateX}%, ${translateY}%)`,
         }}
@@ -325,6 +355,16 @@ function CroppableImage({
           draggable={false}
         />
       </div>
+      {/* Crop viewport: rectangle showing what will be visible in the grid tile */}
+      <div
+        className="pointer-events-none absolute inset-0 rounded-lg border-2 border-white/90 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.2)]"
+        aria-hidden
+      />
+      {debug && (touchCount > 0 || isGestureActive) && (
+        <div className="pointer-events-none absolute left-2 top-2 rounded bg-black/70 px-2 py-1 font-mono text-xs text-white">
+          touches: {touchCount} {isGestureActive ? " · moving" : ""}
+        </div>
+      )}
       <span
         className="absolute right-1 top-1 flex h-5 w-5 cursor-pointer items-center justify-center rounded-md bg-black/50 text-[10px] text-white opacity-0 transition hover:opacity-100"
         onClick={(e) => {
@@ -772,6 +812,7 @@ export default function Home() {
                     handleClearTile(activeIndex);
                     setActiveIndex(null);
                   }}
+                  debug
                 />
               </div>
 
