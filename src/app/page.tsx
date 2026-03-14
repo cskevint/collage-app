@@ -131,7 +131,7 @@ function CroppableImage({
     return el ? { w: el.offsetWidth, h: el.offsetHeight } : null;
   }, []);
 
-  // Native touch with passive: false so preventDefault() works (required for pinch/pan on mobile)
+  // Native touch with passive: false so preventDefault() works (pinch/pan + block browser zoom)
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -161,9 +161,11 @@ function CroppableImage({
     if (e.touches.length === 2) {
       const [a, b] = [e.touches[0], e.touches[1]];
       const distance = Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
-      const centerX = (a.clientX + b.clientX) / 2;
-      const centerY = (a.clientY + b.clientY) / 2;
-      lastPinchRef.current = { distance, centerX, centerY };
+      lastPinchRef.current = {
+        distance,
+        centerX: (a.clientX + b.clientX) / 2,
+        centerY: (a.clientY + b.clientY) / 2,
+      };
       lastPanRef.current = null;
     } else if (e.touches.length === 1) {
       lastPanRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -197,6 +199,7 @@ function CroppableImage({
         );
         const newCrop = clampCrop({ ...current, zoom: newZoom });
         cropRef.current = newCrop;
+        if (cropRefOut) cropRefOut.current = newCrop;
         onCropChange(newCrop);
         return;
       }
@@ -205,12 +208,12 @@ function CroppableImage({
         const z = current.zoom;
         const dx = (e.touches[0].clientX - lastPanRef.current.x) / size.w / z;
         const dy = (e.touches[0].clientY - lastPanRef.current.y) / size.h / z;
-        const newPanX = current.panX - dx;
-        const newPanY = current.panY - dy;
         lastPanRef.current = {
           x: e.touches[0].clientX,
           y: e.touches[0].clientY,
         };
+        const newPanX = current.panX - dx;
+        const newPanY = current.panY - dy;
         const newCrop = clampCrop({ ...current, panX: newPanX, panY: newPanY });
         cropRef.current = newCrop;
         if (cropRefOut) cropRefOut.current = newCrop;
@@ -263,8 +266,8 @@ function CroppableImage({
       if (!size || size.w === 0 || size.h === 0) return;
       pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
       const current = cropRef.current;
-
       const entries = Array.from(pointersRef.current.entries());
+
       if (entries.length === 2) {
         const [[, p1], [, p2]] = entries;
         const distance = Math.hypot(p2.x - p1.x, p2.y - p1.y);
@@ -289,9 +292,9 @@ function CroppableImage({
         const z = current.zoom;
         const dx = (x - lastPanRef.current.x) / size.w / z;
         const dy = (y - lastPanRef.current.y) / size.h / z;
+        lastPanRef.current = { x, y };
         const newPanX = current.panX - dx;
         const newPanY = current.panY - dy;
-        lastPanRef.current = { x, y };
         const newCrop = clampCrop({ ...current, panX: newPanX, panY: newPanY });
         cropRef.current = newCrop;
         if (cropRefOut) cropRefOut.current = newCrop;
@@ -327,7 +330,10 @@ function CroppableImage({
     (e: React.WheelEvent) => {
       e.preventDefault();
       const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, crop.zoom + delta));
+      const newZoom = Math.max(
+        MIN_ZOOM,
+        Math.min(MAX_ZOOM, crop.zoom + delta)
+      );
       const newCrop = clampCrop(snapCrop({ ...crop, zoom: newZoom }));
       if (cropRefOut) cropRefOut.current = newCrop;
       onCropChange(newCrop);
@@ -419,9 +425,7 @@ export default function Home() {
     const index = activeIndex;
     if (index !== null && images[index]) {
       const finalCrop =
-        activeCropRef.current ??
-        images[index]?.crop ??
-        getDefaultCrop();
+        activeCropRef.current ?? images[index]?.crop ?? getDefaultCrop();
       setImages((prev) => {
         const next = [...prev];
         const tile = next[index];
@@ -824,7 +828,7 @@ export default function Home() {
                       </span>
                     </>
                   ) : (
-                    <span className="text-2xl text-zinc-300 dark:text-zinc-600">
+                    <span className="text-5xl font-light text-zinc-500 dark:text-zinc-500">
                       +
                     </span>
                   )}
