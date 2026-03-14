@@ -19,6 +19,7 @@ export default function Home() {
   const fileInputsRef = useRef<(HTMLInputElement | null)[]>([]);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [showBorder, setShowBorder] = useState(true);
 
   const gridSide = useMemo(() => Math.ceil(Math.sqrt(tileCount)), [tileCount]);
 
@@ -97,6 +98,7 @@ export default function Home() {
     const rows = gridSide;
     const tileWidth = canvas.width / cols;
     const tileHeight = canvas.height / rows;
+    const gap = showBorder ? 16 : 0;
 
     try {
       const loadImage = (src: string) =>
@@ -116,8 +118,10 @@ export default function Home() {
         const col = index % cols;
         const row = Math.floor(index / cols);
 
-        const x = col * tileWidth;
-        const y = row * tileHeight;
+        const x = col * tileWidth + gap / 2;
+        const y = row * tileHeight + gap / 2;
+        const drawWidth = tileWidth - gap;
+        const drawHeight = tileHeight - gap;
 
         const sourceSize = Math.min(img.width, img.height);
         const sx = (img.width - sourceSize) / 2;
@@ -131,8 +135,8 @@ export default function Home() {
           sourceSize,
           x,
           y,
-          tileWidth,
-          tileHeight,
+          drawWidth,
+          drawHeight,
         );
       }
 
@@ -148,130 +152,112 @@ export default function Home() {
     }
   };
 
-  const filledCount = images.filter(Boolean).length;
-
   return (
-    <div className="min-h-screen bg-zinc-950 px-4 py-10 text-zinc-50">
-      <main className="mx-auto flex max-w-3xl flex-col gap-8 rounded-3xl bg-zinc-900/80 p-6 shadow-xl ring-1 ring-zinc-800/80 backdrop-blur">
-        <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              Quick Collage
-            </h1>
-            <p className="mt-1 text-sm text-zinc-400">
-              Choose 2–9 tiles, drop in photos, and export a square collage ready
-              for WhatsApp and socials.
-            </p>
-          </div>
-          <div className="mt-2 flex items-center gap-2 text-xs text-zinc-400 sm:mt-0">
-            <span className="inline-flex h-7 items-center rounded-full bg-zinc-800 px-3">
-              {filledCount}/{tileCount} tiles filled
-            </span>
-          </div>
-        </header>
-
-        <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-zinc-900 p-4 ring-1 ring-zinc-800">
-          <div className="flex flex-col gap-2">
-            <span className="text-xs font-medium uppercase tracking-wide text-zinc-400">
-              Tiles
-            </span>
-            <div className="flex flex-wrap gap-2">
+    <div className="min-h-screen bg-zinc-100 px-2 py-5 text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100 sm:px-4">
+      <main className="mx-auto flex w-full max-w-md flex-col gap-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+            <span>Grid</span>
+            <select
+              value={tileCount}
+              onChange={(e) => handleTileCountChange(Number(e.target.value))}
+              className="h-8 rounded-lg border-0 bg-zinc-200 px-2.5 text-xs font-medium text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-zinc-500"
+            >
               {Array.from({ length: MAX_TILES - MIN_TILES + 1 }).map((_, i) => {
                 const value = i + MIN_TILES;
-                const active = value === tileCount;
                 return (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => handleTileCountChange(value)}
-                    className={`inline-flex h-8 items-center justify-center rounded-full px-3 text-xs font-medium transition ${
-                      active
-                        ? "bg-zinc-50 text-zinc-900 shadow-sm"
-                        : "bg-zinc-900 text-zinc-300 ring-1 ring-zinc-700 hover:bg-zinc-800"
-                    }`}
-                  >
+                  <option key={value} value={value}>
                     {value}
-                  </button>
+                  </option>
                 );
               })}
-            </div>
-          </div>
+            </select>
+          </label>
+
+          <label className="inline-flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+            <span>Border</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={showBorder}
+              onClick={() => setShowBorder((prev) => !prev)}
+              className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition ${
+                showBorder
+                  ? "bg-zinc-900 dark:bg-zinc-100"
+                  : "bg-zinc-200 dark:bg-zinc-700"
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+                  showBorder ? "translate-x-4" : "translate-x-0.5"
+                }`}
+              />
+            </button>
+          </label>
 
           <button
             type="button"
             onClick={handleExport}
             disabled={images.every((tile) => !tile) || isExporting}
-            className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-400 px-4 py-2 text-sm font-semibold text-emerald-950 shadow-sm transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-300"
+            className="ml-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-zinc-900 px-3 py-2 text-xs font-medium text-white transition hover:bg-zinc-800 disabled:pointer-events-none disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
           >
-            {isExporting ? "Preparing…" : "Download collage"}
+            {isExporting ? "…" : "Download"}
           </button>
-        </section>
+        </div>
 
-        <section className="flex flex-col gap-4 rounded-2xl bg-zinc-900 p-4 ring-1 ring-zinc-800">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-medium uppercase tracking-wide text-zinc-400">
-              Layout preview
-            </span>
-            <span className="text-xs text-zinc-500">
-              {gridSide} × {gridSide} grid · 1:1 aspect
-            </span>
+        <div className="relative w-full aspect-square">
+          <div
+            className={`grid h-full w-full bg-zinc-100 dark:bg-zinc-900 ${
+              showBorder ? "gap-px" : "gap-0"
+            }`}
+            style={{ gridTemplateColumns: `repeat(${gridSide}, minmax(0, 1fr))` }}
+          >
+            {Array.from({ length: tileCount }).map((_, index) => {
+              const tile = images[index];
+              return (
+                <button
+                  key={index}
+                  type="button"
+                  onClick={() => triggerFileSelect(index)}
+                  className="group relative flex min-h-0 items-center justify-center overflow-hidden bg-zinc-200 transition hover:opacity-90 dark:bg-zinc-800"
+                >
+                  {tile ? (
+                    <>
+                      <img
+                        src={tile.url}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                      <span
+                        className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-md bg-black/50 text-[10px] text-white opacity-0 transition group-hover:opacity-100"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleClearTile(index);
+                        }}
+                      >
+                        ×
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-2xl text-zinc-300 dark:text-zinc-600">
+                      +
+                    </span>
+                  )}
+
+                  <input
+                    ref={(el) => {
+                      fileInputsRef.current[index] = el;
+                    }}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => handleFileChange(index, event)}
+                  />
+                </button>
+              );
+            })}
           </div>
-
-          <div className="relative mx-auto aspect-square w-full max-w-md">
-            <div className="grid h-full w-full gap-1 rounded-2xl bg-zinc-900 p-1 ring-1 ring-zinc-800"
-                 style={{ gridTemplateColumns: `repeat(${gridSide}, minmax(0, 1fr))` }}>
-              {Array.from({ length: tileCount }).map((_, index) => {
-                const tile = images[index];
-                return (
-                  <button
-                    key={index}
-                    type="button"
-                    onClick={() => triggerFileSelect(index)}
-                    className="group relative flex items-center justify-center overflow-hidden rounded-xl bg-zinc-900/80 ring-1 ring-zinc-800/80 transition hover:ring-emerald-400"
-                  >
-                    {tile ? (
-                      <>
-                        <img
-                          src={tile.url}
-                          alt={`Tile ${index + 1}`}
-                          className="h-full w-full object-cover"
-                        />
-                        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-black/0 to-black/40 opacity-0 transition group-hover:opacity-100" />
-                        <span className="pointer-events-none absolute bottom-1 left-1 rounded-full bg-black/60 px-2 py-0.5 text-xs text-zinc-100">
-                          Replace
-                        </span>
-                        <span
-                          className="absolute right-1 top-1 hidden h-6 w-6 items-center justify-center rounded-full bg-black/70 text-xs text-zinc-100 shadow-sm group-hover:flex"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleClearTile(index);
-                          }}
-                        >
-                          ×
-                        </span>
-                      </>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center gap-1 text-xs text-zinc-400">
-                        <span className="text-lg">＋</span>
-                        <span>Tile {index + 1}</span>
-                      </div>
-                    )}
-
-                    <input
-                      ref={(el) => {
-                        fileInputsRef.current[index] = el;
-                      }}
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(event) => handleFileChange(index, event)}
-                    />
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </section>
+        </div>
 
         <canvas
           ref={canvasRef}
