@@ -141,24 +141,21 @@ function CroppableImage({
     onCropChange(clampCrop(snapCrop(cropRef.current)));
   }, [onCropChange]);
 
-  const handleTouchStart = useCallback(
-    (e: React.TouchEvent) => {
-      setTouchCount(e.touches.length);
-      setIsGestureActive(true);
-      if (e.touches.length === 2) {
-        const [a, b] = [e.touches[0], e.touches[1]];
-        const distance = Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
-        const centerX = (a.clientX + b.clientX) / 2;
-        const centerY = (a.clientY + b.clientY) / 2;
-        lastPinchRef.current = { distance, centerX, centerY };
-        lastPanRef.current = null;
-      } else if (e.touches.length === 1) {
-        lastPanRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-        lastPinchRef.current = null;
-      }
-    },
-    []
-  );
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    setTouchCount(e.touches.length);
+    setIsGestureActive(true);
+    if (e.touches.length === 2) {
+      const [a, b] = [e.touches[0], e.touches[1]];
+      const distance = Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+      const centerX = (a.clientX + b.clientX) / 2;
+      const centerY = (a.clientY + b.clientY) / 2;
+      lastPinchRef.current = { distance, centerX, centerY };
+      lastPanRef.current = null;
+    } else if (e.touches.length === 1) {
+      lastPanRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      lastPinchRef.current = null;
+    }
+  }, []);
 
   const handleTouchMove = useCallback(
     (e: React.TouchEvent) => {
@@ -166,6 +163,7 @@ function CroppableImage({
       hadGestureRef.current = true;
       const size = getContainerSize();
       if (!size || size.w === 0 || size.h === 0) return;
+      const current = cropRef.current;
 
       if (e.touches.length === 2 && lastPinchRef.current) {
         const [a, b] = [e.touches[0], e.touches[1]];
@@ -181,25 +179,29 @@ function CroppableImage({
         };
         const newZoom = Math.max(
           MIN_ZOOM,
-          Math.min(MAX_ZOOM, crop.zoom * ratio)
+          Math.min(MAX_ZOOM, current.zoom * ratio)
         );
-        onCropChange(clampCrop({ ...crop, zoom: newZoom }));
+        const newCrop = clampCrop({ ...current, zoom: newZoom });
+        cropRef.current = newCrop;
+        onCropChange(newCrop);
         return;
       }
 
       if (e.touches.length === 1 && lastPanRef.current) {
         const dx = (e.touches[0].clientX - lastPanRef.current.x) / size.w;
         const dy = (e.touches[0].clientY - lastPanRef.current.y) / size.h;
-        const newPanX = Math.max(0, Math.min(1, crop.panX - dx));
-        const newPanY = Math.max(0, Math.min(1, crop.panY - dy));
+        const newPanX = Math.max(0, Math.min(1, current.panX - dx));
+        const newPanY = Math.max(0, Math.min(1, current.panY - dy));
         lastPanRef.current = {
           x: e.touches[0].clientX,
           y: e.touches[0].clientY,
         };
-        onCropChange(clampCrop({ ...crop, panX: newPanX, panY: newPanY }));
+        const newCrop = clampCrop({ ...current, panX: newPanX, panY: newPanY });
+        cropRef.current = newCrop;
+        onCropChange(newCrop);
       }
     },
-    [crop, getContainerSize, onCropChange]
+    [getContainerSize, onCropChange]
   );
 
   const handleTouchEnd = useCallback(
@@ -246,6 +248,7 @@ function CroppableImage({
       const size = getContainerSize();
       if (!size || size.w === 0 || size.h === 0) return;
       pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const current = cropRef.current;
 
       const entries = Array.from(pointersRef.current.entries());
       if (entries.length === 2) {
@@ -260,21 +263,25 @@ function CroppableImage({
           };
           const newZoom = Math.max(
             MIN_ZOOM,
-            Math.min(MAX_ZOOM, crop.zoom * ratio)
+            Math.min(MAX_ZOOM, current.zoom * ratio)
           );
-          onCropChange(clampCrop({ ...crop, zoom: newZoom }));
+          const newCrop = clampCrop({ ...current, zoom: newZoom });
+          cropRef.current = newCrop;
+          onCropChange(newCrop);
         }
       } else if (entries.length === 1 && lastPanRef.current) {
         const [, { x, y }] = entries[0] as [number, { x: number; y: number }];
         const dx = (x - lastPanRef.current.x) / size.w;
         const dy = (y - lastPanRef.current.y) / size.h;
-        const newPanX = Math.max(0, Math.min(1, crop.panX - dx));
-        const newPanY = Math.max(0, Math.min(1, crop.panY - dy));
+        const newPanX = Math.max(0, Math.min(1, current.panX - dx));
+        const newPanY = Math.max(0, Math.min(1, current.panY - dy));
         lastPanRef.current = { x, y };
-        onCropChange(clampCrop({ ...crop, panX: newPanX, panY: newPanY }));
+        const newCrop = clampCrop({ ...current, panX: newPanX, panY: newPanY });
+        cropRef.current = newCrop;
+        onCropChange(newCrop);
       }
     },
-    [crop, getContainerSize, onCropChange]
+    [getContainerSize, onCropChange]
   );
 
   const handlePointerUp = useCallback(
@@ -774,6 +781,7 @@ export default function Home() {
                     </span>
                   )}
 
+                  {/* No capture attribute: lets mobile show gallery/camera roll; capture would force camera */}
                   <input
                     ref={(el) => {
                       fileInputsRef.current[index] = el;
