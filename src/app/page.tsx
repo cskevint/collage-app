@@ -682,6 +682,7 @@ export default function Home() {
             <div
               className="w-full max-w-sm rounded-xl bg-zinc-50 p-4 text-zinc-900 shadow-lg dark:bg-zinc-900 dark:text-zinc-50"
               onClick={(e) => e.stopPropagation()}
+              style={{ touchAction: "none" }}
             >
               <div className="mb-3 flex items-center justify-between text-sm font-medium">
                 <span>Edit tile {activeIndex + 1}</span>
@@ -694,7 +695,10 @@ export default function Home() {
                 </button>
               </div>
 
-              <div className="relative w-full aspect-square overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800">
+              <div
+                className="relative w-full overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800"
+                style={{ aspectRatio: `${gridRows} / ${gridCols}` }}
+              >
                 <CroppableImage
                   url={images[activeIndex]!.url}
                   crop={images[activeIndex]!.crop ?? getDefaultCrop()}
