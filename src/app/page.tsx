@@ -1,6 +1,13 @@
 "use client";
 
-import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ChangeEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 type Crop = { zoom: number; panX: number; panY: number };
 
@@ -12,18 +19,9 @@ type TileImage = {
   crop?: Crop;
 };
 
-const MIN_TILES = 2;
-const MAX_TILES = 9;
 const CANVAS_SIZE = 1080;
 
-type GridLayoutKey =
-  | "2-h"
-  | "2-v"
-  | "3-h"
-  | "3-v"
-  | "4"
-  | "6"
-  | "9";
+type GridLayoutKey = "2-h" | "2-v" | "3-h" | "3-v" | "4" | "6" | "9";
 
 const GRID_LAYOUT_OPTIONS: { value: GridLayoutKey; label: string }[] = [
   { value: "2-h", label: "2 (H)" },
@@ -97,39 +95,53 @@ function CroppableImage({
   onClear,
 }: CroppableImageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const lastPinchRef = useRef<{ distance: number; centerX: number; centerY: number } | null>(null);
+  const lastPinchRef = useRef<{
+    distance: number;
+    centerX: number;
+    centerY: number;
+  } | null>(null);
   const lastPanRef = useRef<{ x: number; y: number } | null>(null);
   const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const hadGestureRef = useRef(false);
   const justGesturedRef = useRef(false);
   const cropRef = useRef(crop);
-  cropRef.current = crop;
+  useEffect(() => {
+    cropRef.current = crop;
+  }, [crop]);
 
   const getContainerSize = useCallback(() => {
     const el = containerRef.current;
     return el ? { w: el.offsetWidth, h: el.offsetHeight } : null;
   }, []);
 
+  // Native touchmove with passive: false so preventDefault() works (browser ignores it in React's passive handlers)
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length >= 1) e.preventDefault();
+    };
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => el.removeEventListener("touchmove", onTouchMove);
+  }, []);
+
   const applyGestureEnd = useCallback(() => {
     onCropChange(clampCrop(snapCrop(cropRef.current)));
   }, [onCropChange]);
 
-  const handleTouchStart = useCallback(
-    (e: React.TouchEvent) => {
-      if (e.touches.length === 2) {
-        const [a, b] = [e.touches[0], e.touches[1]];
-        const distance = Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
-        const centerX = (a.clientX + b.clientX) / 2;
-        const centerY = (a.clientY + b.clientY) / 2;
-        lastPinchRef.current = { distance, centerX, centerY };
-        lastPanRef.current = null;
-      } else if (e.touches.length === 1) {
-        lastPanRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-        lastPinchRef.current = null;
-      }
-    },
-    []
-  );
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      const [a, b] = [e.touches[0], e.touches[1]];
+      const distance = Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+      const centerX = (a.clientX + b.clientX) / 2;
+      const centerY = (a.clientY + b.clientY) / 2;
+      lastPinchRef.current = { distance, centerX, centerY };
+      lastPanRef.current = null;
+    } else if (e.touches.length === 1) {
+      lastPanRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      lastPinchRef.current = null;
+    }
+  }, []);
 
   const handleTouchMove = useCallback(
     (e: React.TouchEvent) => {
@@ -140,10 +152,20 @@ function CroppableImage({
 
       if (e.touches.length === 2 && lastPinchRef.current) {
         const [a, b] = [e.touches[0], e.touches[1]];
-        const distance = Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+        const distance = Math.hypot(
+          b.clientX - a.clientX,
+          b.clientY - a.clientY
+        );
         const ratio = distance / lastPinchRef.current.distance;
-        lastPinchRef.current = { distance, centerX: (a.clientX + b.clientX) / 2, centerY: (a.clientY + b.clientY) / 2 };
-        const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, crop.zoom * ratio));
+        lastPinchRef.current = {
+          distance,
+          centerX: (a.clientX + b.clientX) / 2,
+          centerY: (a.clientY + b.clientY) / 2,
+        };
+        const newZoom = Math.max(
+          MIN_ZOOM,
+          Math.min(MAX_ZOOM, crop.zoom * ratio)
+        );
         onCropChange(clampCrop({ ...crop, zoom: newZoom }));
         return;
       }
@@ -153,7 +175,10 @@ function CroppableImage({
         const dy = (e.touches[0].clientY - lastPanRef.current.y) / size.h;
         const newPanX = Math.max(0, Math.min(1, crop.panX - dx));
         const newPanY = Math.max(0, Math.min(1, crop.panY - dy));
-        lastPanRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        lastPanRef.current = {
+          x: e.touches[0].clientX,
+          y: e.touches[0].clientY,
+        };
         onCropChange(clampCrop({ ...crop, panX: newPanX, panY: newPanY }));
       }
     },
@@ -173,23 +198,26 @@ function CroppableImage({
     [applyGestureEnd]
   );
 
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent) => {
-      if (e.button !== 0) return;
-      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-      pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (pointersRef.current.size === 1) {
-        lastPanRef.current = { x: e.clientX, y: e.clientY };
-        lastPinchRef.current = null;
-      } else if (pointersRef.current.size === 2) {
-        const [p1, p2] = Array.from(pointersRef.current.entries()).map(([, v]) => v);
-        const distance = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-        lastPinchRef.current = { distance, centerX: (p1.x + p2.x) / 2, centerY: (p1.y + p2.y) / 2 };
-        lastPanRef.current = null;
-      }
-    },
-    []
-  );
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointersRef.current.size === 1) {
+      lastPanRef.current = { x: e.clientX, y: e.clientY };
+      lastPinchRef.current = null;
+    } else if (pointersRef.current.size === 2) {
+      const [p1, p2] = Array.from(pointersRef.current.entries()).map(
+        ([, v]) => v
+      );
+      const distance = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+      lastPinchRef.current = {
+        distance,
+        centerX: (p1.x + p2.x) / 2,
+        centerY: (p1.y + p2.y) / 2,
+      };
+      lastPanRef.current = null;
+    }
+  }, []);
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
@@ -204,8 +232,15 @@ function CroppableImage({
         const distance = Math.hypot(p2.x - p1.x, p2.y - p1.y);
         if (lastPinchRef.current) {
           const ratio = distance / lastPinchRef.current.distance;
-          lastPinchRef.current = { distance, centerX: (p1.x + p2.x) / 2, centerY: (p1.y + p2.y) / 2 };
-          const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, crop.zoom * ratio));
+          lastPinchRef.current = {
+            distance,
+            centerX: (p1.x + p2.x) / 2,
+            centerY: (p1.y + p2.y) / 2,
+          };
+          const newZoom = Math.max(
+            MIN_ZOOM,
+            Math.min(MAX_ZOOM, crop.zoom * ratio)
+          );
           onCropChange(clampCrop({ ...crop, zoom: newZoom }));
         }
       } else if (entries.length === 1 && lastPanRef.current) {
@@ -278,6 +313,7 @@ function CroppableImage({
           transform: `scale(${zoom}) translate(${translateX}%, ${translateY}%)`,
         }}
       >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={url}
           alt=""
@@ -304,12 +340,13 @@ function CroppableImage({
 
 export default function Home() {
   const [gridLayout, setGridLayout] = useState<GridLayoutKey>("4");
-  const { cols: gridCols, rows: gridRows, tileCount } = useMemo(
-    () => getGridFromLayout(gridLayout),
-    [gridLayout],
-  );
-  const [images, setImages] = useState<(TileImage | null)[]>(
-    () => new Array(getGridFromLayout("4").tileCount).fill(null),
+  const {
+    cols: gridCols,
+    rows: gridRows,
+    tileCount,
+  } = useMemo(() => getGridFromLayout(gridLayout), [gridLayout]);
+  const [images, setImages] = useState<(TileImage | null)[]>(() =>
+    new Array(getGridFromLayout("4").tileCount).fill(null)
   );
   const fileInputsRef = useRef<(HTMLInputElement | null)[]>([]);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -347,7 +384,10 @@ export default function Home() {
     }
   };
 
-  const handleFileChange = (index: number, event: ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (
+    index: number,
+    event: ChangeEvent<HTMLInputElement>
+  ) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -363,20 +403,23 @@ export default function Home() {
     });
   };
 
-  const handleImageLoad = useCallback((index: number, naturalWidth: number, naturalHeight: number) => {
-    setImages((prev) => {
-      const next = [...prev];
-      const tile = next[index];
-      if (!tile) return prev;
-      next[index] = {
-        ...tile,
-        naturalWidth,
-        naturalHeight,
-        crop: tile.crop ?? getDefaultCrop(),
-      };
-      return next;
-    });
-  }, []);
+  const handleImageLoad = useCallback(
+    (index: number, naturalWidth: number, naturalHeight: number) => {
+      setImages((prev) => {
+        const next = [...prev];
+        const tile = next[index];
+        if (!tile) return prev;
+        next[index] = {
+          ...tile,
+          naturalWidth,
+          naturalHeight,
+          crop: tile.crop ?? getDefaultCrop(),
+        };
+        return next;
+      });
+    },
+    []
+  );
 
   const handleCropChange = useCallback((index: number, crop: Crop) => {
     setImages((prev) => {
@@ -468,24 +511,23 @@ export default function Home() {
         const drawWidth = tileWidth - gap;
         const drawHeight = tileHeight - gap;
 
-        const coverScale = Math.max(drawWidth / img.width, drawHeight / img.height);
+        const coverScale = Math.max(
+          drawWidth / img.width,
+          drawHeight / img.height
+        );
         const zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, crop.zoom));
         const srcW = drawWidth / (coverScale * zoom);
         const srcH = drawHeight / (coverScale * zoom);
-        const srcX = Math.max(0, Math.min(img.width - srcW, crop.panX * (img.width - srcW)));
-        const srcY = Math.max(0, Math.min(img.height - srcH, crop.panY * (img.height - srcH)));
-
-        ctx.drawImage(
-          img,
-          srcX,
-          srcY,
-          srcW,
-          srcH,
-          x,
-          y,
-          drawWidth,
-          drawHeight,
+        const srcX = Math.max(
+          0,
+          Math.min(img.width - srcW, crop.panX * (img.width - srcW))
         );
+        const srcY = Math.max(
+          0,
+          Math.min(img.height - srcH, crop.panY * (img.height - srcH))
+        );
+
+        ctx.drawImage(img, srcX, srcY, srcW, srcH, x, y, drawWidth, drawHeight);
       }
 
       const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
@@ -537,7 +579,9 @@ export default function Home() {
           <div className="relative">
             <select
               value={gridLayout}
-              onChange={(e) => handleGridLayoutChange(e.target.value as GridLayoutKey)}
+              onChange={(e) =>
+                handleGridLayoutChange(e.target.value as GridLayoutKey)
+              }
               aria-label="Grid layout"
               className="h-9 appearance-none rounded-lg border-0 bg-zinc-200 pl-3 pr-9 text-sm font-medium text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-zinc-500"
             >
@@ -554,7 +598,12 @@ export default function Home() {
               viewBox="0 0 24 24"
               aria-hidden
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 9l-7 7-7-7"
+              />
             </svg>
           </div>
 
@@ -587,8 +636,19 @@ export default function Home() {
               className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-2.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:pointer-events-none disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
               aria-label="Reset all images"
             >
-              <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              <svg
+                className="h-4 w-4 shrink-0"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
               </svg>
               Reset
             </button>
@@ -598,19 +658,30 @@ export default function Home() {
               onClick={handleExport}
               disabled={images.every((tile) => !tile) || isExporting}
               className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:pointer-events-none disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-            aria-label="Share collage"
-          >
-            {isExporting ? (
-              "…"
-            ) : (
-              <>
-                <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                </svg>
-                Share
-              </>
-            )}
-          </button>
+              aria-label="Share collage"
+            >
+              {isExporting ? (
+                "…"
+              ) : (
+                <>
+                  <svg
+                    className="h-4 w-4 shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+                    />
+                  </svg>
+                  Share
+                </>
+              )}
+            </button>
           </div>
         </div>
 
@@ -641,6 +712,7 @@ export default function Home() {
                 >
                   {tile ? (
                     <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={tile.url}
                         alt=""
@@ -678,23 +750,15 @@ export default function Home() {
         </div>
 
         {activeIndex !== null && images[activeIndex] && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+            onClick={() => setActiveIndex(null)}
+          >
             <div
               className="w-full max-w-sm rounded-xl bg-zinc-50 p-4 text-zinc-900 shadow-lg dark:bg-zinc-900 dark:text-zinc-50"
               onClick={(e) => e.stopPropagation()}
               style={{ touchAction: "none" }}
             >
-              <div className="mb-3 flex items-center justify-between text-sm font-medium">
-                <span>Edit tile {activeIndex + 1}</span>
-                <button
-                  type="button"
-                  className="text-xs text-zinc-500 hover:text-zinc-300 dark:text-zinc-400"
-                  onClick={() => setActiveIndex(null)}
-                >
-                  Done
-                </button>
-              </div>
-
               <div
                 className="relative w-full overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800"
                 style={{ aspectRatio: `${gridRows} / ${gridCols}` }}
@@ -731,11 +795,7 @@ export default function Home() {
           </div>
         )}
 
-        <canvas
-          ref={canvasRef}
-          className="hidden"
-          aria-hidden="true"
-        />
+        <canvas ref={canvasRef} className="hidden" aria-hidden="true" />
       </main>
     </div>
   );
