@@ -66,16 +66,24 @@ function getDefaultCrop(): Crop {
 }
 
 function snapCrop(crop: Crop): Crop {
+  const half = 1 / (2 * crop.zoom);
+  const panMin = 0.5 - half;
+  const panMax = 0.5 + half;
   const snap = (v: number) =>
-    v < SNAP_THRESHOLD ? 0 : v > 1 - SNAP_THRESHOLD ? 1 : v;
+    v < panMin + SNAP_THRESHOLD ? panMin : v > panMax - SNAP_THRESHOLD ? panMax : v;
   return { ...crop, panX: snap(crop.panX), panY: snap(crop.panY) };
 }
 
+/** Clamp zoom and pan so the image always fully covers the tile (no empty edges). */
 function clampCrop(crop: Crop): Crop {
+  const zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, crop.zoom));
+  const half = 1 / (2 * zoom);
+  const panMin = 0.5 - half;
+  const panMax = 0.5 + half;
   return {
-    zoom: Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, crop.zoom)),
-    panX: Math.max(0, Math.min(1, crop.panX)),
-    panY: Math.max(0, Math.min(1, crop.panY)),
+    zoom,
+    panX: Math.max(panMin, Math.min(panMax, crop.panX)),
+    panY: Math.max(panMin, Math.min(panMax, crop.panY)),
   };
 }
 
@@ -85,8 +93,6 @@ type CroppableImageProps = {
   onCropChange: (crop: Crop) => void;
   onImageLoad: (naturalWidth: number, naturalHeight: number) => void;
   onClear: () => void;
-  /** When true, show touch/pointer count and gesture state for debugging */
-  debug?: boolean;
 };
 
 function CroppableImage({
@@ -95,11 +101,9 @@ function CroppableImage({
   onCropChange,
   onImageLoad,
   onClear,
-  debug = false,
 }: CroppableImageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isGestureActive, setIsGestureActive] = useState(false);
-  const [touchCount, setTouchCount] = useState(0);
   const lastPinchRef = useRef<{
     distance: number;
     centerX: number;
@@ -142,7 +146,6 @@ function CroppableImage({
   }, [onCropChange]);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    setTouchCount(e.touches.length);
     setIsGestureActive(true);
     if (e.touches.length === 2) {
       const [a, b] = [e.touches[0], e.touches[1]];
@@ -206,7 +209,6 @@ function CroppableImage({
 
   const handleTouchEnd = useCallback(
     (e: React.TouchEvent) => {
-      setTouchCount(e.touches.length);
       if (e.touches.length < 2) lastPinchRef.current = null;
       if (e.touches.length < 1) {
         setIsGestureActive(false);
@@ -223,7 +225,6 @@ function CroppableImage({
     if (e.button !== 0) return;
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    setTouchCount(pointersRef.current.size);
     setIsGestureActive(true);
     if (pointersRef.current.size === 1) {
       lastPanRef.current = { x: e.clientX, y: e.clientY };
@@ -287,7 +288,6 @@ function CroppableImage({
   const handlePointerUp = useCallback(
     (e: React.PointerEvent) => {
       pointersRef.current.delete(e.pointerId);
-      setTouchCount(pointersRef.current.size);
       if (pointersRef.current.size < 2) lastPinchRef.current = null;
       if (pointersRef.current.size === 0) {
         setIsGestureActive(false);
@@ -367,11 +367,6 @@ function CroppableImage({
         className="pointer-events-none absolute inset-0 rounded-lg border-2 border-white/90 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.2)]"
         aria-hidden
       />
-      {debug && (touchCount > 0 || isGestureActive) && (
-        <div className="pointer-events-none absolute left-2 top-2 rounded bg-black/70 px-2 py-1 font-mono text-xs text-white">
-          touches: {touchCount} {isGestureActive ? " · moving" : ""}
-        </div>
-      )}
       <span
         className="absolute right-1 top-1 flex h-5 w-5 cursor-pointer items-center justify-center rounded-md bg-black/50 text-[10px] text-white opacity-0 transition hover:opacity-100"
         onClick={(e) => {
@@ -820,7 +815,6 @@ export default function Home() {
                     handleClearTile(activeIndex);
                     setActiveIndex(null);
                   }}
-                  debug
                 />
               </div>
 
