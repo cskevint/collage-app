@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useCallback, useMemo, useRef, useState } from "react";
+import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Crop = { zoom: number; panX: number; panY: number };
 
@@ -268,8 +268,19 @@ export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [showBorder, setShowBorder] = useState(true);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
   const gridSide = useMemo(() => Math.ceil(Math.sqrt(tileCount)), [tileCount]);
+  const hasImages = images.some(Boolean);
+
+  useEffect(() => {
+    if (!hasImages) return;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasImages]);
 
   const handleTileCountChange = (value: number) => {
     setTileCount(value);
@@ -345,6 +356,19 @@ export default function Home() {
       input.value = "";
     }
   };
+
+  const handleResetAll = useCallback(() => {
+    setImages((prev) => {
+      prev.forEach((tile) => {
+        if (tile?.url) URL.revokeObjectURL(tile.url);
+      });
+      return new Array(tileCount).fill(null) as (TileImage | null)[];
+    });
+    fileInputsRef.current.forEach((input) => {
+      if (input) input.value = "";
+    });
+    setActiveIndex(null);
+  }, [tileCount]);
 
   const handleExport = async () => {
     if (!canvasRef.current) return;
@@ -457,25 +481,27 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-zinc-100 px-2 py-5 text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100 sm:px-4">
-      <main className="mx-auto flex w-full max-w-md flex-col gap-5">
+      <main className="mx-auto flex w-full max-w-md flex-col gap-4">
+        <h1 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+          Collage App
+        </h1>
+
         <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
-            <span>Grid</span>
-            <select
-              value={tileCount}
-              onChange={(e) => handleTileCountChange(Number(e.target.value))}
-              className="h-9 rounded-lg border-0 bg-zinc-200 px-3 text-sm font-medium text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-zinc-500"
-            >
+          <select
+            value={tileCount}
+            onChange={(e) => handleTileCountChange(Number(e.target.value))}
+            aria-label="Grid size"
+            className="h-9 rounded-lg border-0 bg-zinc-200 px-3 text-sm font-medium text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-zinc-500"
+          >
               {Array.from({ length: MAX_TILES - MIN_TILES + 1 }).map((_, i) => {
                 const value = i + MIN_TILES;
                 return (
                   <option key={value} value={value}>
-                    {value}
+                    {value} grid
                   </option>
                 );
               })}
-            </select>
-          </label>
+          </select>
 
           <label className="inline-flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
             <span>Border</span>
@@ -498,14 +524,39 @@ export default function Home() {
             </button>
           </label>
 
-          <button
-            type="button"
-            onClick={handleExport}
-            disabled={images.every((tile) => !tile) || isExporting}
-            className="ml-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:pointer-events-none disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+          <div className="ml-auto flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleResetAll}
+              disabled={!images.some(Boolean)}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-2.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:pointer-events-none disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              aria-label="Reset all images"
+            >
+              <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Reset
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={images.every((tile) => !tile) || isExporting}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:pointer-events-none disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+            aria-label="Share collage"
           >
-            {isExporting ? "…" : "Share"}
+            {isExporting ? (
+              "…"
+            ) : (
+              <>
+                <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                </svg>
+                Share
+              </>
+            )}
           </button>
+          </div>
         </div>
 
         <div className="relative w-full aspect-square">
@@ -521,17 +572,32 @@ export default function Home() {
                 <button
                   key={index}
                   type="button"
-                  onClick={() => triggerFileSelect(index)}
+                  onClick={() => {
+                    if (tile) {
+                      setActiveIndex(index);
+                    } else {
+                      triggerFileSelect(index);
+                    }
+                  }}
                   className="group relative flex min-h-0 items-center justify-center overflow-hidden bg-zinc-200 transition hover:opacity-90 dark:bg-zinc-800"
                 >
                   {tile ? (
-                    <CroppableImage
-                      url={tile.url}
-                      crop={tile.crop ?? getDefaultCrop()}
-                      onCropChange={(crop) => handleCropChange(index, crop)}
-                      onImageLoad={(nw, nh) => handleImageLoad(index, nw, nh)}
-                      onClear={() => handleClearTile(index)}
-                    />
+                    <>
+                      <img
+                        src={tile.url}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                      <span
+                        className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-md bg-black/50 text-[10px] text-white opacity-0 transition group-hover:opacity-100"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleClearTile(index);
+                        }}
+                      >
+                        ×
+                      </span>
+                    </>
                   ) : (
                     <span className="text-2xl text-zinc-300 dark:text-zinc-600">
                       +
@@ -552,6 +618,56 @@ export default function Home() {
             })}
           </div>
         </div>
+
+        {activeIndex !== null && images[activeIndex] && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+            <div
+              className="w-full max-w-sm rounded-xl bg-zinc-50 p-4 text-zinc-900 shadow-lg dark:bg-zinc-900 dark:text-zinc-50"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-3 flex items-center justify-between text-sm font-medium">
+                <span>Edit tile {activeIndex + 1}</span>
+                <button
+                  type="button"
+                  className="text-xs text-zinc-500 hover:text-zinc-300 dark:text-zinc-400"
+                  onClick={() => setActiveIndex(null)}
+                >
+                  Done
+                </button>
+              </div>
+
+              <div className="relative w-full aspect-square overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800">
+                <CroppableImage
+                  url={images[activeIndex]!.url}
+                  crop={images[activeIndex]!.crop ?? getDefaultCrop()}
+                  onCropChange={(crop) => handleCropChange(activeIndex, crop)}
+                  onImageLoad={(nw, nh) => handleImageLoad(activeIndex, nw, nh)}
+                  onClear={() => {
+                    handleClearTile(activeIndex);
+                    setActiveIndex(null);
+                  }}
+                />
+              </div>
+
+              <div className="mt-4 flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                  onClick={() => triggerFileSelect(activeIndex)}
+                >
+                  Replace photo
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-zinc-50 hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                  onClick={() => setActiveIndex(null)}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <canvas
           ref={canvasRef}
