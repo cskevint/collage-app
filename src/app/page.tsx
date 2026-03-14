@@ -330,10 +330,7 @@ function CroppableImage({
     (e: React.WheelEvent) => {
       e.preventDefault();
       const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      const newZoom = Math.max(
-        MIN_ZOOM,
-        Math.min(MAX_ZOOM, crop.zoom + delta)
-      );
+      const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, crop.zoom + delta));
       const newCrop = clampCrop(snapCrop({ ...crop, zoom: newZoom }));
       if (cropRefOut) cropRefOut.current = newCrop;
       onCropChange(newCrop);
