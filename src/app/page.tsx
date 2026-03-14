@@ -339,6 +339,7 @@ function CroppableImage({
   );
 
   const zoom = crop.zoom;
+  const isZoomOne = zoom <= 1;
   const translateX = (0.5 - crop.panX) * (zoom - 1) * 100;
   const translateY = (0.5 - crop.panY) * (zoom - 1) * 100;
 
@@ -364,18 +365,29 @@ function CroppableImage({
       }}
     >
       <div
-        className={`absolute h-full w-full origin-center transition-opacity duration-75 ${
+        className={`absolute h-full w-full transition-opacity duration-75 ${
           isGestureActive ? "opacity-60" : "opacity-100"
-        }`}
-        style={{
-          transform: `scale(${zoom}) translate(${translateX}%, ${translateY}%)`,
-        }}
+        } ${!isZoomOne ? "origin-center" : ""}`}
+        style={
+          isZoomOne
+            ? undefined
+            : {
+                transform: `scale(${zoom}) translate(${translateX}%, ${translateY}%)`,
+              }
+        }
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={url}
           alt=""
           className="h-full w-full object-cover"
+          style={
+            isZoomOne
+              ? {
+                  objectPosition: `${crop.panX * 100}% ${crop.panY * 100}%`,
+                }
+              : undefined
+          }
           onLoad={(e) => {
             const img = e.currentTarget;
             onImageLoad(img.naturalWidth, img.naturalHeight);
@@ -795,20 +807,32 @@ export default function Home() {
                         {(() => {
                           const c = tile.crop ?? getDefaultCrop();
                           const z = c.zoom;
+                          const isZoomOne = z <= 1;
                           const tx = (0.5 - c.panX) * (z - 1) * 100;
                           const ty = (0.5 - c.panY) * (z - 1) * 100;
                           return (
                             <div
-                              className="absolute h-full w-full origin-center"
-                              style={{
-                                transform: `scale(${z}) translate(${tx}%, ${ty}%)`,
-                              }}
+                              className={`absolute h-full w-full ${!isZoomOne ? "origin-center" : ""}`}
+                              style={
+                                isZoomOne
+                                  ? undefined
+                                  : {
+                                      transform: `scale(${z}) translate(${tx}%, ${ty}%)`,
+                                    }
+                              }
                             >
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={tile.url}
                                 alt=""
                                 className="h-full w-full object-cover"
+                                style={
+                                  isZoomOne
+                                    ? {
+                                        objectPosition: `${c.panX * 100}% ${c.panY * 100}%`,
+                                      }
+                                    : undefined
+                                }
                               />
                             </div>
                           );
@@ -852,13 +876,19 @@ export default function Home() {
             onClick={closeModalAndSaveCrop}
           >
             <div
-              className="w-full max-w-sm rounded-xl bg-zinc-50 p-4 text-zinc-900 shadow-lg dark:bg-zinc-900 dark:text-zinc-50"
+              className="flex max-h-[90vh] w-full max-w-sm flex-col rounded-xl bg-zinc-50 p-4 text-zinc-900 shadow-lg dark:bg-zinc-900 dark:text-zinc-50"
               onClick={(e) => e.stopPropagation()}
               style={{ touchAction: "none" }}
             >
               <div
-                className="relative w-full overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800"
-                style={{ aspectRatio: `${gridRows} / ${gridCols}` }}
+                className="relative mx-auto overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800"
+                style={{
+                  aspectRatio: `${gridRows} / ${gridCols}`,
+                  maxHeight: "70vh",
+                  height: "70vh",
+                  width: "auto",
+                  maxWidth: "100%",
+                }}
               >
                 <CroppableImage
                   url={images[activeIndex]!.url}
