@@ -15,6 +15,49 @@ type TileImage = {
 const MIN_TILES = 2;
 const MAX_TILES = 9;
 const CANVAS_SIZE = 1080;
+
+type GridLayoutKey =
+  | "2-h"
+  | "2-v"
+  | "3-h"
+  | "3-v"
+  | "4"
+  | "6"
+  | "9";
+
+const GRID_LAYOUT_OPTIONS: { value: GridLayoutKey; label: string }[] = [
+  { value: "2-h", label: "2 (H)" },
+  { value: "2-v", label: "2 (V)" },
+  { value: "3-h", label: "3 (H)" },
+  { value: "3-v", label: "3 (V)" },
+  { value: "4", label: "4 grid" },
+  { value: "6", label: "6 grid" },
+  { value: "9", label: "9 grid" },
+];
+
+function getGridFromLayout(layout: GridLayoutKey): {
+  cols: number;
+  rows: number;
+  tileCount: number;
+} {
+  switch (layout) {
+    case "2-h":
+      return { cols: 2, rows: 1, tileCount: 2 };
+    case "2-v":
+      return { cols: 1, rows: 2, tileCount: 2 };
+    case "3-h":
+      return { cols: 3, rows: 1, tileCount: 3 };
+    case "3-v":
+      return { cols: 1, rows: 3, tileCount: 3 };
+    default: {
+      const n = Number(layout);
+      const side = Math.ceil(Math.sqrt(n));
+      const cols = side;
+      const rows = Math.ceil(n / side);
+      return { cols, rows, tileCount: n };
+    }
+  }
+}
 const BORDER_GAP_PX = 8;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 4;
@@ -260,9 +303,13 @@ function CroppableImage({
 }
 
 export default function Home() {
-  const [tileCount, setTileCount] = useState<number>(4);
+  const [gridLayout, setGridLayout] = useState<GridLayoutKey>("4");
+  const { cols: gridCols, rows: gridRows, tileCount } = useMemo(
+    () => getGridFromLayout(gridLayout),
+    [gridLayout],
+  );
   const [images, setImages] = useState<(TileImage | null)[]>(
-    () => new Array(tileCount).fill(null),
+    () => new Array(getGridFromLayout("4").tileCount).fill(null),
   );
   const fileInputsRef = useRef<(HTMLInputElement | null)[]>([]);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -270,7 +317,6 @@ export default function Home() {
   const [showBorder, setShowBorder] = useState(true);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
-  const gridSide = useMemo(() => Math.ceil(Math.sqrt(tileCount)), [tileCount]);
   const hasImages = images.some(Boolean);
 
   useEffect(() => {
@@ -282,11 +328,12 @@ export default function Home() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasImages]);
 
-  const handleTileCountChange = (value: number) => {
-    setTileCount(value);
+  const handleGridLayoutChange = (layout: GridLayoutKey) => {
+    const { tileCount: nextCount } = getGridFromLayout(layout);
+    setGridLayout(layout);
     setImages((prev) => {
-      const next = new Array(value).fill(null) as (TileImage | null)[];
-      for (let i = 0; i < Math.min(prev.length, value); i++) {
+      const next = new Array(nextCount).fill(null) as (TileImage | null)[];
+      for (let i = 0; i < Math.min(prev.length, nextCount); i++) {
         next[i] = prev[i];
       }
       return next;
@@ -391,8 +438,8 @@ export default function Home() {
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    const cols = gridSide;
-    const rows = gridSide;
+    const cols = gridCols;
+    const rows = gridRows;
     const tileWidth = canvas.width / cols;
     const tileHeight = canvas.height / rows;
     const gap = showBorder ? BORDER_GAP_PX : 0;
@@ -487,21 +534,29 @@ export default function Home() {
         </h1>
 
         <div className="flex flex-wrap items-center gap-3">
-          <select
-            value={tileCount}
-            onChange={(e) => handleTileCountChange(Number(e.target.value))}
-            aria-label="Grid size"
-            className="h-9 rounded-lg border-0 bg-zinc-200 px-3 text-sm font-medium text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-zinc-500"
-          >
-              {Array.from({ length: MAX_TILES - MIN_TILES + 1 }).map((_, i) => {
-                const value = i + MIN_TILES;
-                return (
-                  <option key={value} value={value}>
-                    {value} grid
-                  </option>
-                );
-              })}
-          </select>
+          <div className="relative">
+            <select
+              value={gridLayout}
+              onChange={(e) => handleGridLayoutChange(e.target.value as GridLayoutKey)}
+              aria-label="Grid layout"
+              className="h-9 appearance-none rounded-lg border-0 bg-zinc-200 pl-3 pr-9 text-sm font-medium text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-zinc-500"
+            >
+              {GRID_LAYOUT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <svg
+              className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500 dark:text-zinc-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
 
           <label className="inline-flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
             <span>Border</span>
@@ -564,7 +619,10 @@ export default function Home() {
             className={`grid h-full w-full bg-zinc-100 dark:bg-zinc-900 ${
               showBorder ? "gap-2 p-2" : "gap-0 p-0"
             }`}
-            style={{ gridTemplateColumns: `repeat(${gridSide}, minmax(0, 1fr))` }}
+            style={{
+              gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
+              gridTemplateRows: `repeat(${gridRows}, minmax(0, 1fr))`,
+            }}
           >
             {Array.from({ length: tileCount }).map((_, index) => {
               const tile = images[index];
