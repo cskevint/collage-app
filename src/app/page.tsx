@@ -97,6 +97,8 @@ type CroppableImageProps = {
   onCropChange: (crop: Crop) => void;
   onImageLoad: (naturalWidth: number, naturalHeight: number) => void;
   onClear: () => void;
+  /** Ref to flush current crop when closing modal (Save/backdrop) so grid updates. */
+  cropRefOut?: React.MutableRefObject<Crop | null>;
 };
 
 function CroppableImage({
@@ -105,6 +107,7 @@ function CroppableImage({
   onCropChange,
   onImageLoad,
   onClear,
+  cropRefOut,
 }: CroppableImageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isGestureActive, setIsGestureActive] = useState(false);
@@ -120,7 +123,8 @@ function CroppableImage({
   const cropRef = useRef(crop);
   useEffect(() => {
     cropRef.current = crop;
-  }, [crop]);
+    if (cropRefOut) cropRefOut.current = crop;
+  }, [crop, cropRefOut]);
 
   const getContainerSize = useCallback(() => {
     const el = containerRef.current;
@@ -146,8 +150,11 @@ function CroppableImage({
   }, []);
 
   const applyGestureEnd = useCallback(() => {
-    onCropChange(clampCrop(snapCrop(cropRef.current)));
-  }, [onCropChange]);
+    const final = clampCrop(snapCrop(cropRef.current));
+    cropRef.current = final;
+    if (cropRefOut) cropRefOut.current = final;
+    onCropChange(final);
+  }, [onCropChange, cropRefOut]);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     setIsGestureActive(true);
@@ -206,10 +213,11 @@ function CroppableImage({
         };
         const newCrop = clampCrop({ ...current, panX: newPanX, panY: newPanY });
         cropRef.current = newCrop;
+        if (cropRefOut) cropRefOut.current = newCrop;
         onCropChange(newCrop);
       }
     },
-    [getContainerSize, onCropChange]
+    [getContainerSize, onCropChange, cropRefOut]
   );
 
   const handleTouchEnd = useCallback(
@@ -273,6 +281,7 @@ function CroppableImage({
           );
           const newCrop = clampCrop({ ...current, zoom: newZoom });
           cropRef.current = newCrop;
+          if (cropRefOut) cropRefOut.current = newCrop;
           onCropChange(newCrop);
         }
       } else if (entries.length === 1 && lastPanRef.current) {
@@ -285,10 +294,11 @@ function CroppableImage({
         lastPanRef.current = { x, y };
         const newCrop = clampCrop({ ...current, panX: newPanX, panY: newPanY });
         cropRef.current = newCrop;
+        if (cropRefOut) cropRefOut.current = newCrop;
         onCropChange(newCrop);
       }
     },
-    [getContainerSize, onCropChange]
+    [getContainerSize, onCropChange, cropRefOut]
   );
 
   const handlePointerUp = useCallback(
@@ -318,9 +328,11 @@ function CroppableImage({
       e.preventDefault();
       const delta = e.deltaY > 0 ? -0.1 : 0.1;
       const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, crop.zoom + delta));
-      onCropChange(clampCrop(snapCrop({ ...crop, zoom: newZoom })));
+      const newCrop = clampCrop(snapCrop({ ...crop, zoom: newZoom }));
+      if (cropRefOut) cropRefOut.current = newCrop;
+      onCropChange(newCrop);
     },
-    [crop, onCropChange]
+    [crop, onCropChange, cropRefOut]
   );
 
   const zoom = crop.zoom;
@@ -398,9 +410,27 @@ export default function Home() {
   );
   const fileInputsRef = useRef<(HTMLInputElement | null)[]>([]);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const activeCropRef = useRef<Crop | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [showBorder, setShowBorder] = useState(true);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+
+  const closeModalAndSaveCrop = useCallback(() => {
+    const index = activeIndex;
+    if (index !== null && images[index]) {
+      const finalCrop =
+        activeCropRef.current ??
+        images[index]?.crop ??
+        getDefaultCrop();
+      setImages((prev) => {
+        const next = [...prev];
+        const tile = next[index];
+        if (tile) next[index] = { ...tile, crop: finalCrop };
+        return next;
+      });
+    }
+    setActiveIndex(null);
+  }, [activeIndex, images]);
 
   const hasImages = images.some(Boolean);
 
@@ -818,7 +848,7 @@ export default function Home() {
         {activeIndex !== null && images[activeIndex] && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
-            onClick={() => setActiveIndex(null)}
+            onClick={closeModalAndSaveCrop}
           >
             <div
               className="w-full max-w-sm rounded-xl bg-zinc-50 p-4 text-zinc-900 shadow-lg dark:bg-zinc-900 dark:text-zinc-50"
@@ -838,6 +868,7 @@ export default function Home() {
                     handleClearTile(activeIndex);
                     setActiveIndex(null);
                   }}
+                  cropRefOut={activeCropRef}
                 />
               </div>
 
@@ -852,7 +883,7 @@ export default function Home() {
                 <button
                   type="button"
                   className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-zinc-50 hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-                  onClick={() => setActiveIndex(null)}
+                  onClick={closeModalAndSaveCrop}
                 >
                   Save
                 </button>
