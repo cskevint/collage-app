@@ -70,7 +70,11 @@ function snapCrop(crop: Crop): Crop {
   const panMin = 0.5 - half;
   const panMax = 0.5 + half;
   const snap = (v: number) =>
-    v < panMin + SNAP_THRESHOLD ? panMin : v > panMax - SNAP_THRESHOLD ? panMax : v;
+    v < panMin + SNAP_THRESHOLD
+      ? panMin
+      : v > panMax - SNAP_THRESHOLD
+        ? panMax
+        : v;
   return { ...crop, panX: snap(crop.panX), panY: snap(crop.panY) };
 }
 
@@ -191,10 +195,11 @@ function CroppableImage({
       }
 
       if (e.touches.length === 1 && lastPanRef.current) {
-        const dx = (e.touches[0].clientX - lastPanRef.current.x) / size.w;
-        const dy = (e.touches[0].clientY - lastPanRef.current.y) / size.h;
-        const newPanX = Math.max(0, Math.min(1, current.panX - dx));
-        const newPanY = Math.max(0, Math.min(1, current.panY - dy));
+        const z = current.zoom;
+        const dx = (e.touches[0].clientX - lastPanRef.current.x) / size.w / z;
+        const dy = (e.touches[0].clientY - lastPanRef.current.y) / size.h / z;
+        const newPanX = current.panX - dx;
+        const newPanY = current.panY - dy;
         lastPanRef.current = {
           x: e.touches[0].clientX,
           y: e.touches[0].clientY,
@@ -272,10 +277,11 @@ function CroppableImage({
         }
       } else if (entries.length === 1 && lastPanRef.current) {
         const [, { x, y }] = entries[0] as [number, { x: number; y: number }];
-        const dx = (x - lastPanRef.current.x) / size.w;
-        const dy = (y - lastPanRef.current.y) / size.h;
-        const newPanX = Math.max(0, Math.min(1, current.panX - dx));
-        const newPanY = Math.max(0, Math.min(1, current.panY - dy));
+        const z = current.zoom;
+        const dx = (x - lastPanRef.current.x) / size.w / z;
+        const dy = (y - lastPanRef.current.y) / size.h / z;
+        const newPanX = current.panX - dx;
+        const newPanY = current.panY - dy;
         lastPanRef.current = { x, y };
         const newCrop = clampCrop({ ...current, panX: newPanX, panY: newPanY });
         cropRef.current = newCrop;
@@ -754,12 +760,29 @@ export default function Home() {
                 >
                   {tile ? (
                     <>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={tile.url}
-                        alt=""
-                        className="h-full w-full object-cover"
-                      />
+                      <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+                        {(() => {
+                          const c = tile.crop ?? getDefaultCrop();
+                          const z = c.zoom;
+                          const tx = (0.5 - c.panX) * (z - 1) * 100;
+                          const ty = (0.5 - c.panY) * (z - 1) * 100;
+                          return (
+                            <div
+                              className="absolute h-full w-full origin-center"
+                              style={{
+                                transform: `scale(${z}) translate(${tx}%, ${ty}%)`,
+                              }}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={tile.url}
+                                alt=""
+                                className="h-full w-full object-cover"
+                              />
+                            </div>
+                          );
+                        })()}
+                      </div>
                       <span
                         className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-md bg-black/50 text-[10px] text-white opacity-0 transition group-hover:opacity-100"
                         onClick={(e) => {
